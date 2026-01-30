@@ -1,0 +1,16 @@
+[package]
+name = "kvslite"
+version = "0.1.0"
+edition = "2021"
+authors = ["kvslite contributors"]
+description = "A lightweight embedded key-value storage engine"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/yourusername/kvslite"
+keywords = ["database", "kv", "storage", "embedded"]
+categories = ["database"]
+
+[dependencies]
+crc32fast = "1.4"
+
+[dev-dependencies]
+tempfile = "3.0"
