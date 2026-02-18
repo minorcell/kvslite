@@ -113,7 +113,6 @@ impl Wal {
         // 打开文件用于追加写入
         let write_file = OpenOptions::new()
             .create(true)
-            .write(true)
             .append(true)
             .open(&path)?;
 
@@ -309,7 +308,6 @@ impl Wal {
         self.write_file.sync_data()?;
         self.write_file = OpenOptions::new()
             .create(true)
-            .write(true)
             .append(true)
             .open(&self.path)?;
         Ok(())

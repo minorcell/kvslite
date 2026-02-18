@@ -271,7 +271,7 @@ impl Record {
         let rec_len = u32::from_le_bytes(rec_len_bytes) as usize;
 
         // 验证 rec_len 是否合理
-        if rec_len < HEADER_SIZE + 4 || rec_len > MAX_RECORD_SIZE {
+        if !(HEADER_SIZE + 4..=MAX_RECORD_SIZE).contains(&rec_len) {
             return Err(Error::UnexpectedEof);
         }
 
