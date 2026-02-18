@@ -162,6 +162,16 @@ impl Record {
     /// | magic | rec_len | version | kind | key_len | val_len | key | value | crc32 |
     /// ```
     pub fn encode(&self) -> Result<Vec<u8>> {
+        // 复用内部编码逻辑
+        let (buf, _, _) = self.encode_with_data()?;
+        Ok(buf)
+    }
+
+    /// 编码记录并返回元数据
+    ///
+    /// 返回编码后的数据以及记录总长度和 value 位置偏移，
+    /// 用于避免重复编码。
+    pub(crate) fn encode_with_data(&self) -> Result<(Vec<u8>, u64, u64)> {
         // 计算总长度
         let rec_len = HEADER_SIZE + self.key.len() + self.value.len() + 4; // +4 for crc32
 
@@ -207,7 +217,10 @@ impl Record {
         // 10. 写入 crc32
         buf.write_all(&crc.to_le_bytes())?;
 
-        Ok(buf)
+        // value 在 record 中的位置：总长度 - crc(4) - value_len
+        let value_offset_in_record = rec_len as u64 - 4 - self.value.len() as u64;
+
+        Ok((buf, rec_len as u64, value_offset_in_record))
     }
 
     /// 从字节流解码记录

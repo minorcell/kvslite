@@ -224,24 +224,29 @@ impl Wal {
     /// - 如果 sync=true，函数返回 Ok 表示数据已安全落盘
     /// - 如果 sync=false，数据在 OS 缓冲区，崩溃可能丢失
     pub fn append(&mut self, record: &Record, sync: bool) -> Result<u64> {
-        // 1. 编码记录
         let data = record.encode()?;
+        self.append_raw(&data, sync)
+    }
 
-        // 2. 记录起始位置
+    /// 追加已编码的数据到 WAL
+    ///
+    /// 用于优化场景，避免重复编码。
+    pub fn append_raw(&mut self, data: &[u8], sync: bool) -> Result<u64> {
+        // 1. 记录起始位置
         let start_offset = self.offset;
 
-        // 3. 写入数据
-        self.write_file.write_all(&data)?;
+        // 2. 写入数据
+        self.write_file.write_all(data)?;
 
-        // 4. Flush 到 OS 缓冲区
+        // 3. Flush 到 OS 缓冲区
         self.write_file.flush()?;
 
-        // 5. 可选：fsync 到磁盘
+        // 4. 可选：fsync 到磁盘
         if sync {
             self.write_file.sync_data()?;
         }
 
-        // 6. 更新 offset
+        // 5. 更新 offset
         self.offset += data.len() as u64;
 
         Ok(start_offset)
@@ -289,6 +294,25 @@ impl Wal {
     #[allow(dead_code)]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// 同步 WAL 文件到磁盘
+    pub fn sync(&mut self) -> Result<()> {
+        self.write_file.flush()?;
+        self.write_file.sync_data()?;
+        Ok(())
+    }
+
+    /// 关闭 WAL 文件
+    pub fn close(&mut self) -> Result<()> {
+        self.write_file.flush()?;
+        self.write_file.sync_data()?;
+        self.write_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(&self.path)?;
+        Ok(())
     }
 }
 

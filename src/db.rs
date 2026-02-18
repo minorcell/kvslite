@@ -220,16 +220,12 @@ impl Db {
         let mut offset = 0u64;
 
         for record in records {
-            // 计算这条记录的大小（需要重新编码）
-            // 这不是最优的，但 v0.1 优先正确性
-            let encoded = record.encode().unwrap();
-            let record_len = encoded.len() as u64;
+            // 使用 encode_with_data 避免重复编码
+            let (_, record_len, value_offset_in_record) = record.encode_with_data().unwrap();
 
             match record.kind {
                 RecordKind::Put => {
                     // 计算 value 在文件中的位置
-                    // value 位于 record 的末尾（crc 之前）
-                    let value_offset_in_record = record_len - 4 - record.value.len() as u64;
                     let value_pos = ValuePos {
                         offset: offset + value_offset_in_record,
                         len: record.value.len(),
@@ -287,17 +283,16 @@ impl Db {
         // 1. 创建 PUT 记录（会验证大小）
         let record = Record::put(key.to_vec(), value.to_vec())?;
 
-        // 2. 追加到 WAL
-        let record_offset = self.wal.append(&record, self.opts.sync_on_write)?;
+        // 2. 编码并获取元数据（避免重复编码）
+        let (encoded, _record_len, value_offset_in_record) = record.encode_with_data()?;
 
-        // 3. 计算 value 在文件中的位置
-        // value 在 record 的末尾（crc 之前）
-        let encoded = record.encode()?; // TODO: 优化，避免重复编码
-        let record_len = encoded.len() as u64;
-        let value_offset_in_record = record_len - 4 - value.len() as u64;
+        // 3. 追加到 WAL
+        let record_offset = self.wal.append_raw(&encoded, self.opts.sync_on_write)?;
+
+        // 4. 计算 value 在文件中的绝对位置
         let value_offset = record_offset + value_offset_in_record;
 
-        // 4. 更新索引
+        // 5. 更新索引
         self.index.insert(
             key.to_vec(),
             ValuePos {
@@ -390,6 +385,51 @@ impl Db {
         // 3. 从索引中移除
         self.index.remove(key);
 
+        Ok(())
+    }
+
+    /// 手动刷新数据到磁盘
+    ///
+    /// ## 用途
+    ///
+    /// - 当 `sync_on_write=false` 时，可以用此方法手动批量同步
+    /// - 确保数据在程序退出前持久化
+    ///
+    /// ## 示例
+    ///
+    /// ```no_run
+    /// use kvslite::{Db, Options};
+    ///
+    /// let mut db = Db::open("data/db1", Options::default()).unwrap();
+    /// db.put(b"key1", b"value1").unwrap();
+    /// db.put(b"key2", b"value2").unwrap();
+    /// db.flush().unwrap();  // 手动刷盘
+    /// ```
+    pub fn flush(&mut self) -> Result<()> {
+        self.wal.sync()?;
+        Ok(())
+    }
+
+    /// 关闭数据库
+    ///
+    /// ## 行为
+    ///
+    /// - 刷新所有待写入数据到磁盘
+    /// - 关闭 WAL 文件句柄
+    /// - 释放内存索引
+    ///
+    /// ## 示例
+    ///
+    /// ```no_run
+    /// use kvslite::{Db, Options};
+    ///
+    /// let mut db = Db::open("data/db1", Options::default()).unwrap();
+    /// db.put(b"key", b"value").unwrap();
+    /// db.close().unwrap();
+    /// ```
+    pub fn close(&mut self) -> Result<()> {
+        self.flush()?;
+        self.wal.close()?;
         Ok(())
     }
 
