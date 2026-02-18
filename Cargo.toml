@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["kvslite contributors"]
 description = "A lightweight embedded key-value storage engine"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/kvslite"
+repository = "https://github.com/minorcell/kvslite"
 keywords = ["database", "kv", "storage", "embedded"]
 categories = ["database"]
 
